@@ -1,0 +1,28 @@
+{
+  "action": "rules.insert",
+  "value": {
+    "name": "Atomic.Dev page request rate audit",
+    "description": "Log-only first stage. Review real traffic before enabling enforcement. Static assets excluded.",
+    "active": true,
+    "conditionGroup": [
+      {
+        "conditions": [
+          { "type": "method", "op": "eq", "value": "GET" },
+          { "type": "path", "op": "inc", "value": ["/", "/privacy", "/terms"] }
+        ]
+      }
+    ],
+    "action": {
+      "mitigate": {
+        "action": "rate_limit",
+        "rateLimit": {
+          "algo": "fixed_window",
+          "window": 60,
+          "limit": 120,
+          "keys": ["ip"],
+          "action": "log"
+        }
+      }
+    }
+  }
+}
