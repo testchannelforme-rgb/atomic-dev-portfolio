@@ -18,6 +18,8 @@ jobs:
         run: python3 scripts/security_check.py
       - name: Check JavaScript syntax
         run: node --check public/assets/site.js
+      - name: Check page metadata and sitemap
+        run: python3 scripts/seo_check.py
       - name: Download verified Gitleaks and scan all reachable history
         shell: bash
         run: |

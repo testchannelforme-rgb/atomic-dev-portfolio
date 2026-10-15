@@ -1,0 +1,16 @@
+# Atomic.Dev
+
+> Independent apps for racing championships, study, and everyday budgeting.
+
+- [Atomic.Dev](https://atomic-dev-portfolio.vercel.app/): Official portfolio.
+- [GridHQ screenshots](https://atomic-dev-portfolio.vercel.app/gridhq-screenshots): Racing championship management companion. Android release available through GitHub.
+- [GridHQ releases](https://github.com/testchannelforme-rgb/GridHQ-championship.manager/releases/latest): Authoritative public download and release information.
+- [Still screenshots](https://atomic-dev-portfolio.vercel.app/still-screenshots): Study and focus application in development.
+- [LEFT screenshots](https://atomic-dev-portfolio.vercel.app/left-screenshots): Personal budgeting application in development.
+- [Website privacy](https://atomic-dev-portfolio.vercel.app/privacy)
+- [Website terms](https://atomic-dev-portfolio.vercel.app/terms)
+
+Contact: atomic.dev.contact@gmail.com
+Community: https://discord.gg/DHB5K2mrK
+
+Screenshot and interface examples do not represent visitor data. This file is a navigation aid; release links above are authoritative.
