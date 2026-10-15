@@ -31,6 +31,8 @@ class SiteParser(HTMLParser):
         self.anchors = []
         self.resources = []
         self.scripts = []
+        self.jsonld = []
+        self.in_jsonld = False
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -40,18 +42,30 @@ class SiteParser(HTMLParser):
         check('style' not in attrs, f'Inline style on {tag}')
         check(tag not in ('form', 'iframe', 'object', 'embed', 'base'), f'Unexpected active element: {tag}')
         if tag == 'script':
-            check('src' in attrs, 'Inline script is prohibited')
-            self.scripts.append(attrs)
+            self.in_jsonld = attrs.get('type') == 'application/ld+json' and 'src' not in attrs
+            if self.in_jsonld:
+                self.jsonld.append('')
+            else:
+                check('src' in attrs, 'Executable inline script is prohibited')
+                self.scripts.append(attrs)
         if tag == 'a':
             href = attrs.get('href', '')
             self.anchors.append(href)
             check(href.startswith(('#', '/', 'https://', 'mailto:')), 'Unsafe anchor URL scheme')
             if attrs.get('target') == '_blank':
                 check({'noopener', 'noreferrer'} <= set(attrs.get('rel', '').split()), 'External tab missing rel protection')
-        if tag == 'script' or tag == 'img':
+        if (tag == 'script' and not self.in_jsonld) or tag == 'img':
             self.resources.append(attrs.get('src', ''))
         if tag == 'link' and attrs.get('rel') in ('stylesheet', 'preload', 'icon'):
             self.resources.append(attrs.get('href', ''))
+
+    def handle_data(self, data):
+        if self.in_jsonld:
+            self.jsonld[-1] += data
+
+    def handle_endtag(self, tag):
+        if tag == 'script':
+            self.in_jsonld = False
 
 
 config = json.loads((ROOT / 'vercel.json').read_text())
@@ -61,7 +75,13 @@ check(not config.get('rewrites'), 'Unexpected rewrites may hide 404 responses')
 headers = {h['key'].lower(): h['value'] for item in config['headers'] if item['source'] == '/(.*)' for h in item['headers']}
 csp = headers.get('content-security-policy', '')
 digest = 'sha256-' + base64.b64encode(hashlib.sha256((PUBLIC / 'assets/site.js').read_bytes()).digest()).decode()
-for directive in ("default-src 'none'", "script-src '" + digest + "' 'strict-dynamic'", "script-src-attr 'none'", "style-src 'self'", "style-src-attr 'none'", "connect-src 'none'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'none'", "require-trusted-types-for 'script'", "trusted-types 'none'"):
+approved_hashes = {digest}
+for page in PUBLIC.glob('*.html'):
+    for data in re.findall(r'<script type="application/ld\+json">(.*?)</script>', page.read_text(), re.S):
+        approved_hashes.add('sha256-' + base64.b64encode(hashlib.sha256(data.encode()).digest()).decode())
+script_sources = next((part.split()[1:] for part in csp.split('; ') if part.startswith('script-src ')), [])
+check(set(script_sources) == {"'" + h + "'" for h in approved_hashes} | {"'strict-dynamic'"}, 'CSP must allow only current script and structured-data hashes')
+for directive in ("default-src 'none'", "script-src-attr 'none'", "style-src 'self'", "style-src-attr 'none'", "connect-src 'none'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'none'", "require-trusted-types-for 'script'", "trusted-types 'none'"):
     check(directive in csp.split('; '), f'Missing CSP directive: {directive.split()[0]}')
 check('unsafe-inline' not in csp and 'unsafe-eval' not in csp, 'Unsafe CSP allowance')
 check(headers.get('x-content-type-options') == 'nosniff', 'Missing MIME protection')
@@ -72,7 +92,7 @@ check('camera=()' in headers.get('permissions-policy', ''), 'Missing permissions
 check(headers.get('access-control-allow-origin') == 'https://atomic-dev-portfolio.vercel.app', 'CORS must use the fixed canonical origin, never a wildcard')
 check('access-control-allow-credentials' not in headers, 'Credentialed cross-origin requests are not used')
 
-allowed_extensions = {'.html', '.css', '.js', '.svg', '.png', '.jpg', '.ttf', '.txt', '.xml'}
+allowed_extensions = {'.html', '.css', '.js', '.svg', '.png', '.jpg', '.ttf', '.woff2', '.txt', '.xml'}
 banned_name = 'mono' + 'posto'
 for path in PUBLIC.rglob('*'):
     if path.is_file():
@@ -85,6 +105,12 @@ for path in PUBLIC.rglob('*'):
 for path in PUBLIC.glob('*.html'):
     parser = SiteParser()
     parser.feed(path.read_text())
+    for data in parser.jsonld:
+        try:
+            graph = json.loads(data)
+            check(graph.get('@context') == 'https://schema.org', f'Unexpected structured data in {path.name}')
+        except (ValueError, AttributeError):
+            check(False, f'Invalid JSON-LD in {path.name}')
     check(len(parser.ids) == len(set(parser.ids)), f'Duplicate id in {path.name}')
     for href in parser.anchors:
         if href.startswith('#'):
@@ -127,7 +153,7 @@ def scan(label, data):
 
 
 for path in [*PUBLIC.rglob('*'), ROOT / 'vercel.json']:
-    if path.is_file() and path.suffix not in {'.png', '.jpg', '.ttf'}:
+    if path.is_file() and path.suffix not in {'.png', '.jpg', '.ttf', '.woff2'}:
         scan(str(path.relative_to(ROOT)), path.read_bytes())
 
 commits = subprocess.check_output(['git', 'rev-list', '--all'], cwd=ROOT, text=True).splitlines()
